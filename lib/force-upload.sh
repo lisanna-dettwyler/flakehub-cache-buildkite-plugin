@@ -65,7 +65,23 @@ server="${FLAKEHUB_CACHE_SERVER:-https://cache.flakehub.com}"
 parallel="${FORCE_UPLOAD_PARALLEL:-4}"
 max_time="${FORCE_UPLOAD_MAX_TIME:-1800}"
 
-fh() { curl -s --netrc-file "$netrc" "$@"; }
+# The cache API (upload-path, get-missing-paths) wants the netrc password as a Bearer token, which is
+# how magic-nix-cache's attic client sends it; HTTP Basic from --netrc-file is answered 403 AccessError.
+token="$(python3 - "$netrc" "${server#*://}" <<'PY'
+import netrc, sys
+try:
+    auth = netrc.netrc(sys.argv[1]).authenticators(sys.argv[2].split("/")[0])
+    print(auth[2] if auth else "")
+except (OSError, netrc.NetrcParseError):
+    print("")
+PY
+)"
+if [[ -z "$token" ]]; then
+  warn "no entry for ${server#*://} in $netrc; using HTTP Basic from it (the API may refuse it)"
+  fh() { curl -s --netrc-file "$netrc" "$@"; }
+else
+  fh() { curl -s -H "Authorization: Bearer $token" "$@"; }
+fi
 
 # Paths the cache does not serve to this token, one per line.
 missing_in_cache() {
@@ -134,7 +150,7 @@ upload_one() {
   fi
 }
 export -f log warn fh nar_info_json upload_one
-export cache netrc server dry_run max_time
+export cache netrc server token dry_run max_time
 
 mapfile -t candidates < <(grep -v '\.drv$' | grep '^/nix/store/' || true)
 mapfile -t todo < <(printf '%s\n' "${candidates[@]}" | missing_in_cache)
