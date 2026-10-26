@@ -107,7 +107,7 @@ nar_info_json() {
         | { cache: $cache,
             store_path_hash: ($p | split("/")[-1] | .[0:32]),
             store_path: $p,
-            references: ($i.references // []),
+            references: (($i.references // []) | map(sub("^/nix/store/"; ""))),
             system: null,
             deriver: null,
             sigs: ($i.signatures // []),
