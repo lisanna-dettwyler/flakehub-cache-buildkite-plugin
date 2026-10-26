@@ -69,7 +69,10 @@ if [[ $rc == 0 ]]; then
 fi
 
 if [[ $upload_logs == "true" ]]; then
-  buildkite-agent artifact upload "/tmp/mnc-${BUILDKITE_JOB_ID}.log"
+  # A failed log upload (Buildkite's artifact API answering 500) must not fail the job: the
+  # agent's automatic retry of a pipeline-upload step can never pass (duplicate step key).
+  buildkite-agent artifact upload "/tmp/mnc-${BUILDKITE_JOB_ID}.log" \
+    || echo "WARNING: the magic-nix-cache log was not uploaded as an artifact (exit $?)"
 else
   echo "Skipping log upload"
 fi
